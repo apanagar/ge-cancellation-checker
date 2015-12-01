@@ -26,6 +26,7 @@ try {
     }
 }
 catch(e) {
+	console.log(e)
     console.log('Could not find config.json');
     phantom.exit();
 }
@@ -34,6 +35,8 @@ catch(e) {
 system.args.forEach(function(val, i) {
     if (val == '-v' || val == '--verbose') { VERBOSE = true; }
 });
+
+
 
 function fireClick(el) {
     var ev = document.createEvent("MouseEvents");
@@ -89,7 +92,6 @@ var steps = [
     },
     function() { // Accept terms
         page.evaluate(function() {
-            
             function fireClick(el) {
                 var ev = document.createEvent("MouseEvents");
                 ev.initEvent("click", true, true);
@@ -144,7 +146,8 @@ var steps = [
         });
     },
     function() {
-        page.evaluate(function() {
+
+        page.evaluate(function(settings) {
 
             function fireClick(el) {
                 var ev = document.createEvent("MouseEvents");
@@ -155,21 +158,20 @@ var steps = [
             document.querySelector('select[name=selectedEnrollmentCenter]').value = settings.enrollment_location_id.toString();
             fireClick(document.querySelector('input[name=next]'));
             console.log('Choosing SFO...');
-        });
+        } ,settings);
     },
     function() {
 
         page.evaluate(function() {
 
             // We made it! Now we have to scrape the page for the earliest available date
-            
             var date = document.querySelector('.date table tr:first-child td:first-child').innerHTML;
             var month_year = document.querySelector('.date table tr:last-child td:last-child div').innerHTML;
 
             var full_date = month_year.replace(',', ' ' + date + ',');
             // console.log('');
             window.callPhantom('report-interview-time', full_date)
-            // console.log('The next available appointment is on ' + full_date + '.');
+            //console.log('The next available appointment is on ' + full_date + '.');
         });
     }
 ];

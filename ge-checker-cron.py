@@ -5,10 +5,16 @@
 from subprocess import check_output
 from datetime import datetime
 from os import path
-import sys, smtplib, json
+import sys, smtplib, json, os
+from twilio.rest import TwilioRestClient
 
-PWD = path.dirname(sys.argv[0]) 
+PWD = os.path.abspath(os.path.dirname(__file__))
+PHANTOMJS_PATH = '/home/ajay/node_modules/phantomjs/lib/phantom/bin' 
+if not os.path.isfile(PHANTOMJS_PATH + '/phantomjs'):
+    print 'Path to phantomjs is incorrect'
+    sys.exit()
 
+import urllib2
 # Get settings
 try:
     with open('%s/config.json' % PWD) as json_file:    
@@ -40,7 +46,7 @@ if not 'password' in settings or not settings['password']:
     print 'Missing password in config'
     sys.exit()
 
-CURRENT_INTERVIEW_DATE = datetime.strptime(settings['current_interview_date_str'], '%B %d, %Y')
+CURRENT_INTERVIEW_DATE = datetime.strptime(settings['current_interview_date_str'], '%b %d, %Y')
 
 def log(msg):
     print msg
@@ -49,38 +55,34 @@ def log(msg):
     with open(settings['logfile'], 'a') as logfile:
         logfile.write('%s: %s\n' % (datetime.now(), msg))
 
-def send_apt_available_email(current_apt, avail_apt):
-    message = """From: %s
-To: %s
-Subject: Alert: New Global Entry Appointment Available
-Content-Type: text/html
+def send_sms(current_apt, avail_apt):
+    account = "AC00aff63b55e765a3929552f185210e99"
+    token = "a2f0aa4af99682a3e9c775cfa439803e"
+    client = TwilioRestClient(account, token)
+    from_phone = "+15713162774"
+    to_phone = settings['sms_to']
 
-<p>Good news! There's a new Global Entry appointment available on <b>%s</b> (your current appointment is on %s).</p>
+    msg_str = 'Appt available on ' + avail_apt
 
-<p>If this sounds good, please sign in to https://goes-app.cbp.dhs.gov/main/goes to reschedule.</p>
+    message = client.messages.create(to = to_phone,
+                                    from_ = from_phone,
+                                    body = msg_str)
 
-<p>If you reschedule, please remember to update CURRENT_INTERVIEW_DATE in your config.json file.</p>
-""" % (settings['email_from'], ', '.join(settings['email_to']), avail_apt.strftime('%B %d, %Y'), current_apt.strftime('%B %d, %Y'))
+#sys.exit(0)
 
-    try:
-        server = smtplib.SMTP('localhost')
-        server.sendmail(settings['email_from'], settings['email_to'], message)
-        server.quit()
-    except Exception as e:
-        log('Failed to send success email')
-
-
-
-new_apt_str = check_output(['phantomjs', '%s/ge-cancellation-checker.phantom.js' % PWD]); # get string from PhantomJS script - formatted like 'July 20, 2015'
+new_apt_str = check_output(['%s/phantomjs' % PHANTOMJS_PATH, '%s/ge-cancellation-checker.phantom.js' % PWD]); # get string from PhantomJS script - formatted like 'July 20, 2015'
 new_apt_str = new_apt_str.strip()
 
-try: new_apt = datetime.strptime(new_apt_str, '%B %d, %Y')
+try: 
+    new_apt = datetime.strptime(new_apt_str, '%B %d, %Y')
 except ValueError as e:
-    log('%s' % new_apt_str)
+    print new_apt_str
+    log('Error - %s' % new_apt_str)
     sys.exit()
 
+#send_sms(CURRENT_INTERVIEW_DATE, new_apt_str)
 if new_apt < CURRENT_INTERVIEW_DATE: # new appointment is newer than existing!
-    send_apt_available_email(CURRENT_INTERVIEW_DATE, new_apt)   
-    log('Found new appointment on %s (current is on %s)!' % (new_apt, CURRENT_INTERVIEW_DATE))
+    send_sms(CURRENT_INTERVIEW_DATE, new_apt_str)
+    log('Found: %s (current is on %s)!' % (new_apt_str, settings['current_interview_date_str']))
 else:
-    log('No new appointments. Next available on %s (current is on %s)' % (new_apt, CURRENT_INTERVIEW_DATE))
+    log('None. Next on %s (current %s)' % (new_apt_str, settings['current_interview_date_str']))
